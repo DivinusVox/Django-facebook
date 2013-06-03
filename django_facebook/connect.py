@@ -12,6 +12,7 @@ from django_facebook.utils import get_registration_backend, get_form_class, \
     get_profile_model, to_bool, get_user_model, get_instance_for,\
     get_user_attribute, try_get_profile, get_model_for_attribute,\
     get_instance_for_attribute, update_user_attributes
+from django.shortcuts import redirect
 from random import randint
 import logging
 import sys
@@ -221,11 +222,12 @@ def _register_user(request, facebook, profile_callback=None,
                       initial={'ip': request.META['REMOTE_ADDR']})
 
     if not form.is_valid():
-        error_message_format = u'Facebook data %s gave error %s'
-        error_message = error_message_format % (facebook_data, form.errors)
-        error = facebook_exceptions.IncompleteProfileError(error_message)
-        error.form = form
-        raise error
+        redirect('facebook_error')
+        #error_message_format = u'Facebook data %s gave error %s'
+        #error_message = error_message_format % (facebook_data, form.errors)
+        #error = facebook_exceptions.IncompleteProfileError(error_message)
+        #error.form = form
+        #raise error
 
     try:
         # for new registration systems use the backends methods of saving
