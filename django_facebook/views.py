@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
 from django.http import Http404
-from django.shortcuts import render_to_response
+from django.shortcuts import render_to_response, redirect
 from django.template.context import RequestContext
 from django.utils.translation import ugettext as _
 from django.views.decorators.csrf import csrf_exempt
@@ -85,12 +85,14 @@ def _connect(request, graph):
             send_warning(warn_message, e=e,
                          facebook_data=facebook_data)
 
-            context['facebook_mode'] = True
-            context['form'] = e.form
-            return render_to_response(
-                facebook_settings.FACEBOOK_REGISTRATION_TEMPLATE,
-                context_instance=context,
-            )
+            return redirect('facebook_error')
+
+            #context['facebook_mode'] = True
+            #context['form'] = e.form
+            #return render_to_response(
+            #    facebook_settings.FACEBOOK_REGISTRATION_TEMPLATE,
+            #    context_instance=context,
+            #)
         except facebook_exceptions.AlreadyConnectedError, e:
             user_ids = [u.get_user_id() for u in e.users]
             ids_string = ','.join(map(str, user_ids))
