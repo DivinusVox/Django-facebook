@@ -9,6 +9,19 @@ import operator
 
 class FacebookBackend(backends.ModelBackend):
 
+    '''
+    Django Facebook authentication backend
+
+    This backend hides the difference between authenticating with
+    - a django 1.5 custom user model
+    - profile models, which were used prior to 1.5
+
+    **Example usage**
+
+    >>> FacebookBackend().authenticate(facebook_id=myid)
+
+    '''
+
     def authenticate(self, *args, **kwargs):
         '''
         Route to either the user or profile table depending on which type of user
@@ -29,6 +42,13 @@ class FacebookBackend(backends.ModelBackend):
         their facebook ID using email.
 
         This decorator works with django's custom user model
+
+        :param facebook_id:
+            Optional string representing the facebook id.
+        :param facebook_email:
+            Optional string with the facebook email.
+
+        :return: The signed in :class:`User`.
         '''
         user_model = get_user_model()
         if facebook_id or facebook_email:
@@ -69,6 +89,14 @@ class FacebookBackend(backends.ModelBackend):
         Authenticate the facebook user by id OR facebook_email
         We filter using an OR to allow existing members to connect with
         their facebook ID using email.
+
+        :param facebook_id:
+            Optional string representing the facebook id
+
+        :param facebook_email:
+            Optional string with the facebook email
+
+        :return: The signed in :class:`User`.
         '''
         if facebook_id or facebook_email:
             profile_class = get_profile_model()

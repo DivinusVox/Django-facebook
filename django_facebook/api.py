@@ -2,7 +2,8 @@ from django.forms.util import ValidationError
 import json
 from django_facebook import settings as facebook_settings
 from django_facebook.utils import mass_get_or_create, cleanup_oauth_url, \
-    get_profile_model, parse_signed_request, hash_key
+    get_profile_model, parse_signed_request, hash_key, try_get_profile, \
+    get_user_attribute
 from open_facebook.exceptions import OpenFacebookException
 from django_facebook.exceptions import FacebookException
 try:
@@ -198,8 +199,9 @@ def get_facebook_graph(request=None, access_token=None, redirect_uri=None, raise
                             return None
             elif request.user.is_authenticated():
                 # support for offline access tokens stored in the users profile
-                profile = request.user.get_profile()
-                access_token = getattr(profile, 'access_token', None)
+                profile = try_get_profile(request.user)
+                access_token = get_user_attribute(
+                    request.user, profile, 'access_token')
                 if not access_token:
                     if raise_:
                         message = 'Couldnt find an access token in the request or the users profile'
@@ -229,11 +231,11 @@ def _add_current_user_id(graph, user):
     if graph:
         graph.current_user_id = None
 
-    if user.is_authenticated() and graph:
-        profile = user.get_profile()
-        facebook_id = getattr(profile, 'facebook_id', None)
-        if facebook_id:
-            graph.current_user_id = facebook_id
+        if user.is_authenticated():
+            profile = try_get_profile(user)
+            facebook_id = get_user_attribute(user, profile, 'facebook_id')
+            if facebook_id:
+                graph.current_user_id = facebook_id
 
 
 class FacebookUserConverter(object):

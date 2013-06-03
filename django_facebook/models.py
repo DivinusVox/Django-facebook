@@ -7,10 +7,19 @@ from django.db.models.base import ModelBase
 from django_facebook import model_managers, settings as facebook_settings
 from open_facebook.utils import json, camel_to_underscore
 from datetime import timedelta
-from django_facebook.utils import compatible_datetime as datetime,\
-    get_model_for_attribute, get_user_attribute, get_instance_for_attribute,\
-    try_get_profile
+from django_facebook.utils import compatible_datetime as datetime, \
+    get_model_for_attribute, get_user_attribute, get_instance_for_attribute, \
+    try_get_profile, update_user_attributes
 from django_facebook.utils import get_user_model
+from open_facebook.exceptions import OAuthException
+
+
+def get_user_model_setting():
+    from django.conf import settings
+    default = 'auth.User'
+    user_model_setting = getattr(settings, 'AUTH_USER_MODEL', default)
+    return user_model_setting
+
 
 import logging
 import os
@@ -69,14 +78,38 @@ class BaseFacebookModel(models.Model):
     gender = models.CharField(max_length=1, choices=(
         ('m', 'Male'), ('f', 'Female')), blank=True, null=True)
     raw_data = models.TextField(blank=True, null=True)
-    facebook_open_graph = models.BooleanField(
-        default=True, help_text='Determines if this user want to share via open graph')
+
+    # the field which controls if we are sharing to facebook
+    facebook_open_graph = models.NullBooleanField(
+        help_text='Determines if this user want to share via open graph')
+
+    # set to true if we require a new access token
+    new_token_required = models.BooleanField(default=False,
+                                             help_text='Set to true if the access token is outdated or lacks permissions')
+
+    @property
+    def open_graph_new_token_required(self):
+        '''
+        Shows if we need to (re)authenticate the user for open graph sharing
+        '''
+        reauthentication = False
+        if self.facebook_open_graph and self.new_token_required:
+            reauthentication = True
+        elif self.facebook_open_graph is None:
+            reauthentication = True
+        return reauthentication
 
     def __unicode__(self):
         return self.user.__unicode__()
 
     class Meta:
         abstract = True
+
+    def refresh(self):
+        '''
+        Get the latest version of this object from the db
+        '''
+        return self.__class__.objects.get(id=self.id)
 
     def get_user(self):
         '''
@@ -118,11 +151,28 @@ class BaseFacebookModel(models.Model):
 
     def disconnect_facebook(self):
         self.access_token = None
+        self.new_token_required = False
         self.facebook_id = None
 
     def clear_access_token(self):
         self.access_token = None
+        self.new_token_required = False
         self.save()
+
+    def update_access_token(self, new_value):
+        '''
+        Updates the access token
+
+        **Example**::
+
+            # updates to 123 and sets new_token_required to False
+            profile.update_access_token(123)
+
+        :param new_value:
+            The new value for access_token
+        '''
+        self.access_token = new_value
+        self.new_token_required = False
 
     def extend_access_token(self):
         '''
@@ -154,7 +204,7 @@ class BaseFacebookModel(models.Model):
         logger.info(log_format, message, expires_delta)
         if token_changed:
             logger.info('Saving the new access token')
-            self.access_token = access_token
+            self.update_access_token(access_token)
             self.save()
 
         from django_facebook.signals import facebook_token_extend_finished
@@ -209,7 +259,6 @@ FacebookProfileModel = FacebookModel
 
 
 class FacebookUser(models.Model):
-
     '''
     Model for storing a users friends
     '''
@@ -254,7 +303,21 @@ class FacebookProfile(FacebookProfileModel):
     Use this by setting
     AUTH_PROFILE_MODULE = 'django_facebook.FacebookProfile'
     '''
-    user = models.OneToOneField(get_user_model())
+    user = models.OneToOneField(get_user_model_setting())
+
+
+try:
+    from django.contrib.auth.models import AbstractUser, UserManager
+
+    class FacebookCustomUser(AbstractUser, FacebookModel):
+        '''
+        The django 1.5 approach to adding the facebook related fields
+        '''
+        objects = UserManager()
+        # add any customizations you like
+        state = models.CharField(max_length=255, blank=True, null=True)
+except ImportError, e:
+    logger.info('Couldnt setup FacebookUser, got error %s', e)
 
 
 class BaseModelMetaclass(ModelBase):
@@ -384,7 +447,7 @@ class OpenGraphShare(BaseModel):
     '''
     objects = model_managers.OpenGraphShareManager()
 
-    user = models.ForeignKey(get_user_model())
+    user = models.ForeignKey(get_user_model_setting())
 
     # domain stores
     action_domain = models.CharField(max_length=255)
@@ -457,6 +520,19 @@ class OpenGraphShare(BaseModel):
                     'Open graph share failed, writing message %s' % e.message)
                 self.error_message = unicode(e)
                 self.save()
+                # maybe we need a new access token
+                new_token_required = self.exception_requires_new_token(e)
+                # verify that the token didnt change in the mean time
+                user_or_profile = user_or_profile.__class__.objects.get(
+                    id=user_or_profile.id)
+                token_changed = graph.access_token != user_or_profile.access_token
+                if new_token_required and not token_changed:
+                    logger.info(
+                        'a new token is required, setting the flag on the user or profile')
+                    # time to ask the user for a new token
+                    update_user_attributes(self.user, profile, dict(
+                        new_token_required=True), save=True)
+
         elif not graph:
             self.error_message = 'no graph available'
             self.save()
@@ -465,6 +541,21 @@ class OpenGraphShare(BaseModel):
             self.save()
 
         return result
+
+    def exception_requires_new_token(self, e):
+        '''
+        Determines if the exceptions is something which requires us to
+        ask for a new token. Examples are:
+
+        Error validating access token: Session has expired at unix time
+        1350669826. The current unix time is 1369657666.
+
+        (#200) Requires extended permission: publish_actions (error code 200)
+        '''
+        new_token = False
+        if isinstance(e, OAuthException):
+            new_token = True
+        return new_token
 
     def update(self, data, graph=None):
         '''
@@ -528,7 +619,7 @@ class OpenGraphShare(BaseModel):
 
 
 class FacebookInvite(CreatedAtAbstractBase):
-    user = models.ForeignKey(get_user_model())
+    user = models.ForeignKey(get_user_model_setting())
     user_invited = models.CharField(max_length=255)
     message = models.TextField(blank=True, null=True)
     type = models.CharField(blank=True, null=True, max_length=255)

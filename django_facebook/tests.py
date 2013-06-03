@@ -15,8 +15,8 @@ from django_facebook.middleware import FacebookCanvasMiddleWare
 from django_facebook.test_utils.mocks import RequestMock
 from django_facebook.test_utils.testcases import FacebookTest, LiveFacebookTest
 from django_facebook.utils import cleanup_oauth_url, get_profile_model, \
-    ScriptRedirect, get_user_model, get_user_attribute, try_get_profile,\
-    get_instance_for_attribute
+    ScriptRedirect, get_user_model, get_user_attribute, try_get_profile, \
+    get_instance_for_attribute, update_user_attributes
 from functools import partial
 from mock import Mock, patch
 from open_facebook.api import FacebookConnection, FacebookAuthorization, \
@@ -25,6 +25,8 @@ from open_facebook.exceptions import FacebookSSLError, FacebookURLError
 import logging
 import mock
 from django.utils import unittest
+from django_facebook.models import OpenGraphShare
+from django.contrib.contenttypes.models import ContentType
 
 logger = logging.getLogger(__name__)
 __doctests__ = ['django_facebook.api']
@@ -161,6 +163,16 @@ class LazyDecoratorTest(DecoratorTest):
         from django_facebook.decorators import facebook_required_lazy
         self.decorator = facebook_required_lazy
         self.decorator_name = 'FacebookRequiredLazy'
+
+
+class GraphAccessTest(FacebookTest):
+
+    def test_get_persistent(self):
+        graph = get_persistent_graph(self.request)
+        # fake that we are authenticated and have a facebook graph
+        with patch.object(self.request, 'facebook'):
+            self.request.user = get_user_model().objects.all()[:1][0]
+            graph = get_persistent_graph(self.request)
 
 
 class ConnectViewTest(FacebookTest):
@@ -371,7 +383,6 @@ class ExtendTokenTest(LiveFacebookTest):
 class OpenGraphShareTest(FacebookTest):
 
     def test_follow_og_share(self):
-        from django_facebook.models import OpenGraphShare
         user_url = 'http://www.fashiolista.com/style/neni/'
         kwargs = dict(item=user_url)
         user = get_user_model().objects.all()[:1][0]
@@ -389,7 +400,6 @@ class OpenGraphShareTest(FacebookTest):
         share.send()
 
     def test_follow_og_share_error(self):
-        from django_facebook.models import OpenGraphShare
         user_url = 'http://www.fashiolista.com/style/neni/'
         kwargs = dict(item=user_url)
         user = get_user_model().objects.all()[:1][0]
@@ -399,7 +409,6 @@ class OpenGraphShareTest(FacebookTest):
         user_or_profile.facebook_open_graph = True
         user_or_profile.save()
 
-        from django.contrib.contenttypes.models import ContentType
         some_content_type = ContentType.objects.all()[:1][0]
         share = OpenGraphShare.objects.create(
             user_id=user.id,
@@ -410,13 +419,36 @@ class OpenGraphShareTest(FacebookTest):
         )
         share.set_share_dict(kwargs)
         share.save()
-        from open_facebook.exceptions import FacebookUnreachable
+        update_user_attributes(user, profile, dict(new_token_required=False))
+        from open_facebook.exceptions import FacebookUnreachable, OAuthException
         with mock.patch('open_facebook.api.OpenFacebook') as mocked:
             instance = mocked.return_value
             instance.set = Mock(side_effect=FacebookUnreachable('broken'))
             share.send(graph=instance)
             self.assertEqual(share.error_message, 'broken')
             self.assertFalse(share.completed_at)
+            user = get_user_model().objects.get(id=user.id)
+            if profile:
+                profile = get_profile_model().objects.get(id=profile.id)
+            new_token_required = get_user_attribute(
+                user, profile, 'new_token_required')
+            self.assertEqual(new_token_required, False)
+
+        # now try with an oauth exception
+        return
+        # Can't figure out how to test this
+        with mock.patch('open_facebook.api.OpenFacebook') as mocked:
+            instance = mocked.return_value
+            instance.set = Mock(side_effect=OAuthException('permissions'))
+            share.send(graph=instance)
+            self.assertEqual(share.error_message, 'permissions')
+            self.assertFalse(share.completed_at)
+            user = get_user_model().objects.get(id=user.id)
+            if profile:
+                profile = get_profile_model().objects.get(id=profile.id)
+            new_token_required = get_user_attribute(
+                user, profile, 'new_token_required')
+            self.assertEqual(new_token_required, True)
 
 
 class UserConnectTest(FacebookTest):
@@ -449,6 +481,44 @@ class UserConnectTest(FacebookTest):
         profile = try_get_profile(user)
         gender = get_user_attribute(user, profile, 'gender')
         self.assertEqual(gender, 'm')
+
+    def test_update_access_token(self):
+        request = RequestMock().get('/')
+        request.session = {}
+        request.user = AnonymousUser()
+        graph = get_persistent_graph(request, access_token='paul')
+        action, user = connect_user(self.request, facebook_graph=graph)
+        first_user_id = user.id
+
+        # new token required should start out as False
+        profile = try_get_profile(user)
+        new_token_required = get_user_attribute(
+            user, profile, 'new_token_required')
+        self.assertEqual(new_token_required, False)
+
+        # we manually set it to true
+        update_user_attributes(
+            user, profile, dict(new_token_required=True), save=True)
+        if profile:
+            profile = get_profile_model().objects.get(id=profile.id)
+        user = get_user_model().objects.get(id=user.id)
+        new_token_required = get_user_attribute(
+            user, profile, 'new_token_required')
+        self.assertEqual(new_token_required, True)
+
+        # another update should however set it back to False
+        request.facebook = None
+        graph = get_facebook_graph(request, access_token='paul2')
+        logger.info('and the token is %s', graph.access_token)
+        action, user = connect_user(self.request, facebook_graph=graph)
+        user = get_user_model().objects.get(id=user.id)
+        self.assertEqual(user.id, first_user_id)
+        if profile:
+            profile = get_profile_model().objects.get(id=profile.id)
+        user = get_user_model().objects.get(id=user.id)
+        new_token_required = get_user_attribute(
+            user, profile, 'new_token_required')
+        self.assertEqual(new_token_required, False)
 
     def test_long_username(self):
         request = RequestMock().get('/')
@@ -577,11 +647,20 @@ class UserConnectTest(FacebookTest):
         '''
         Django_facebook should use user supplied registration form if given
         '''
-        facebook_settings.FACEBOOK_REGISTRATION_FORM = 'django_facebook.test_utils.forms.SignupForm'
-        facebook = get_facebook_graph(access_token='short_username')
-        action, user = connect_user(self.request, facebook_graph=facebook)
-        # The test form always sets username to test form
-        self.assertEqual(user.username, 'Test form')
+        from django.conf import settings
+        if settings.MODE == 'userena':
+            return
+
+        test_form = 'django_facebook.test_utils.forms.SignupForm'
+        old_setting = facebook_settings.FACEBOOK_REGISTRATION_FORM
+        facebook_settings.FACEBOOK_REGISTRATION_FORM = test_form
+        try:
+            facebook = get_facebook_graph(access_token='short_username')
+            action, user = connect_user(self.request, facebook_graph=facebook)
+            # The test form always sets username to test form
+            self.assertEqual(user.username, 'Test form')
+        finally:
+            facebook_settings.FACEBOOK_REGISTRATION_FORM = old_setting
 
 
 class SimpleRegisterViewTest(FacebookTest):

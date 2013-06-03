@@ -130,9 +130,9 @@ Whereas Django 1.5 and up can use a custom user model.
 
 **Django 1.5**
 
-If you don't already have a custom user model, simply uses the provided model by setting your AUTH_USER_MODEL to FacebookUser::
+If you don't already have a custom user model, simply uses the provided model by setting your AUTH_USER_MODEL to FacebookCustomUser::
 
-AUTH_USER_MODEL = 'member.FacebookUser'
+AUTH_USER_MODEL = 'django_facebook.FacebookCustomUser'
 
 Alternatively use the abstract model provided in django_facebook.models.FacebookProfileModel
 
@@ -235,6 +235,16 @@ class CustomBackend(FacebookRegistrationBackend):
             response = HttpRedirect('/')
         return response
 
+Canvas Application
+------------------
+
+In order to use build a facebook canvas application, you should add this to your ``MIDDLEWARE_CLASSES`` setting::
+
+    'django_facebook.middleware.FacebookCanvasMiddleWare'
+
+This middleware will check for the signed_request parameter in the url and take the appropriate action:
+	* redirect to app authorization dialog if user has not authorized the app, some permission is missing or any other error.
+	* login the current facebook user in django's system and store the access token.
 
 Common bugs
 -----------

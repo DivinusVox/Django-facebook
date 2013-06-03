@@ -171,10 +171,11 @@ def _update_access_token(user, graph):
         # update if not equal to the current token
         new_token = graph.access_token != model_or_profile.access_token
         token_message = 'a new' if new_token else 'the same'
-        logger.info('found %s token', token_message)
+        logger.info(
+            'found %s token %s', token_message, graph.access_token[:10])
         if new_token:
             logger.info('access token changed, updating now')
-            model_or_profile.access_token = graph.access_token
+            model_or_profile.update_access_token(graph.access_token)
             model_or_profile.save()
             # see if we can extend the access token
             # this runs in a task, after extending the token we fire an event
@@ -230,16 +231,12 @@ def _register_user(request, facebook, profile_callback=None,
         # for new registration systems use the backends methods of saving
         new_user = None
         if backend:
-            new_user = backend.register(request, **form.cleaned_data)
+            new_user = backend.register(request,
+                                        form=form, **form.cleaned_data)
         # fall back to the form approach
         if new_user is None:
-            # For backward compatibility, if django-registration form is used
-            #raise ValueError(
-            #    'new_user is None, note that backward compatability for the older versions of django registration has been dropped.')
-             try:
-                 new_user = form.save(profile_callback=profile_callback)
-             except TypeError:
-                 new_user = form.save()
+            raise ValueError(
+                'new_user is None, note that backward compatability for the older versions of django registration has been dropped.')
     except IntegrityError, e:
         # this happens when users click multiple times, the first request registers
         # the second one raises an error

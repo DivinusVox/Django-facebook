@@ -8,8 +8,8 @@ from django.db import models
 class Migration(SchemaMigration):
 
     def forwards(self, orm):
-        # Adding model 'FacebookUser'
-        db.create_table(u'member_facebookuser', (
+        # Adding model 'FacebookCustomUser'
+        db.create_table(u'django_facebook_facebookcustomuser', (
             (u'id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
             ('password', self.gf('django.db.models.fields.CharField')(max_length=128)),
             ('last_login', self.gf('django.db.models.fields.DateTimeField')(default=datetime.datetime.now)),
@@ -33,58 +33,55 @@ class Migration(SchemaMigration):
             ('raw_data', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
             ('facebook_open_graph', self.gf('django.db.models.fields.BooleanField')(default=True)),
             ('image', self.gf('django.db.models.fields.files.ImageField')(max_length=255, null=True, blank=True)),
+            ('state', self.gf('django.db.models.fields.CharField')(max_length=255, null=True, blank=True)),
         ))
-        db.send_create_signal(u'member', ['FacebookUser'])
+        db.send_create_signal(u'django_facebook', ['FacebookCustomUser'])
 
-        # Adding M2M table for field groups on 'FacebookUser'
-        db.create_table(u'member_facebookuser_groups', (
+        # Adding M2M table for field groups on 'FacebookCustomUser'
+        db.create_table(u'django_facebook_facebookcustomuser_groups', (
             ('id', models.AutoField(verbose_name='ID', primary_key=True, auto_created=True)),
-            ('facebookuser', models.ForeignKey(orm[u'member.facebookuser'], null=False)),
+            ('facebookcustomuser', models.ForeignKey(orm[u'django_facebook.facebookcustomuser'], null=False)),
             ('group', models.ForeignKey(orm[u'auth.group'], null=False))
         ))
-        db.create_unique(u'member_facebookuser_groups', ['facebookuser_id', 'group_id'])
+        db.create_unique(u'django_facebook_facebookcustomuser_groups', ['facebookcustomuser_id', 'group_id'])
 
-        # Adding M2M table for field user_permissions on 'FacebookUser'
-        db.create_table(u'member_facebookuser_user_permissions', (
+        # Adding M2M table for field user_permissions on 'FacebookCustomUser'
+        db.create_table(u'django_facebook_facebookcustomuser_user_permissions', (
             ('id', models.AutoField(verbose_name='ID', primary_key=True, auto_created=True)),
-            ('facebookuser', models.ForeignKey(orm[u'member.facebookuser'], null=False)),
+            ('facebookcustomuser', models.ForeignKey(orm[u'django_facebook.facebookcustomuser'], null=False)),
             ('permission', models.ForeignKey(orm[u'auth.permission'], null=False))
         ))
-        db.create_unique(u'member_facebookuser_user_permissions', ['facebookuser_id', 'permission_id'])
+        db.create_unique(u'django_facebook_facebookcustomuser_user_permissions', ['facebookcustomuser_id', 'permission_id'])
 
-        # Adding model 'UserProfile'
-        db.create_table(u'member_userprofile', (
-            (u'id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
-            ('about_me', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
-            ('facebook_id', self.gf('django.db.models.fields.BigIntegerField')(unique=True, null=True, blank=True)),
-            ('access_token', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
-            ('facebook_name', self.gf('django.db.models.fields.CharField')(max_length=255, null=True, blank=True)),
-            ('facebook_profile_url', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
-            ('website_url', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
-            ('blog_url', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
-            ('date_of_birth', self.gf('django.db.models.fields.DateField')(null=True, blank=True)),
-            ('gender', self.gf('django.db.models.fields.CharField')(max_length=1, null=True, blank=True)),
-            ('raw_data', self.gf('django.db.models.fields.TextField')(null=True, blank=True)),
-            ('facebook_open_graph', self.gf('django.db.models.fields.BooleanField')(default=True)),
-            ('image', self.gf('django.db.models.fields.files.ImageField')(max_length=255, null=True, blank=True)),
-            ('user', self.gf('django.db.models.fields.related.OneToOneField')(to=orm['member.FacebookUser'], unique=True)),
-        ))
-        db.send_create_signal(u'member', ['UserProfile'])
 
+        # Changing field 'FacebookInvite.user'
+        db.alter_column('django_facebook_facebook_invite', 'user_id', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['django_facebook.FacebookCustomUser']))
+
+        # Changing field 'OpenGraphShare.user'
+        db.alter_column('django_facebook_open_graph_share', 'user_id', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['django_facebook.FacebookCustomUser']))
+
+        # Changing field 'FacebookProfile.user'
+        db.alter_column(u'django_facebook_facebookprofile', 'user_id', self.gf('django.db.models.fields.related.OneToOneField')(to=orm['django_facebook.FacebookCustomUser'], unique=True))
 
     def backwards(self, orm):
-        # Deleting model 'FacebookUser'
-        db.delete_table(u'member_facebookuser')
+        # Deleting model 'FacebookCustomUser'
+        db.delete_table(u'django_facebook_facebookcustomuser')
 
-        # Removing M2M table for field groups on 'FacebookUser'
-        db.delete_table('member_facebookuser_groups')
+        # Removing M2M table for field groups on 'FacebookCustomUser'
+        db.delete_table('django_facebook_facebookcustomuser_groups')
 
-        # Removing M2M table for field user_permissions on 'FacebookUser'
-        db.delete_table('member_facebookuser_user_permissions')
+        # Removing M2M table for field user_permissions on 'FacebookCustomUser'
+        db.delete_table('django_facebook_facebookcustomuser_user_permissions')
 
-        # Deleting model 'UserProfile'
-        db.delete_table(u'member_userprofile')
 
+        # Changing field 'FacebookInvite.user'
+        db.alter_column('django_facebook_facebook_invite', 'user_id', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['auth.User']))
+
+        # Changing field 'OpenGraphShare.user'
+        db.alter_column('django_facebook_open_graph_share', 'user_id', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['auth.User']))
+
+        # Changing field 'FacebookProfile.user'
+        db.alter_column(u'django_facebook_facebookprofile', 'user_id', self.gf('django.db.models.fields.related.OneToOneField')(to=orm['auth.User'], unique=True))
 
     models = {
         u'auth.group': {
@@ -107,8 +104,8 @@ class Migration(SchemaMigration):
             'model': ('django.db.models.fields.CharField', [], {'max_length': '100'}),
             'name': ('django.db.models.fields.CharField', [], {'max_length': '100'})
         },
-        u'member.facebookuser': {
-            'Meta': {'object_name': 'FacebookUser'},
+        u'django_facebook.facebookcustomuser': {
+            'Meta': {'object_name': 'FacebookCustomUser'},
             'about_me': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
             'access_token': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
             'blog_url': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
@@ -131,12 +128,40 @@ class Migration(SchemaMigration):
             'last_name': ('django.db.models.fields.CharField', [], {'max_length': '30', 'blank': 'True'}),
             'password': ('django.db.models.fields.CharField', [], {'max_length': '128'}),
             'raw_data': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'state': ('django.db.models.fields.CharField', [], {'max_length': '255', 'null': 'True', 'blank': 'True'}),
             'user_permissions': ('django.db.models.fields.related.ManyToManyField', [], {'to': u"orm['auth.Permission']", 'symmetrical': 'False', 'blank': 'True'}),
             'username': ('django.db.models.fields.CharField', [], {'unique': 'True', 'max_length': '30'}),
             'website_url': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'})
         },
-        u'member.userprofile': {
-            'Meta': {'object_name': 'UserProfile'},
+        u'django_facebook.facebookinvite': {
+            'Meta': {'unique_together': "(('user', 'user_invited'),)", 'object_name': 'FacebookInvite', 'db_table': "'django_facebook_facebook_invite'"},
+            'created_at': ('django.db.models.fields.DateTimeField', [], {'auto_now_add': 'True', 'blank': 'True'}),
+            'error': ('django.db.models.fields.BooleanField', [], {'default': 'False'}),
+            'error_message': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'last_attempt': ('django.db.models.fields.DateTimeField', [], {'auto_now_add': 'True', 'null': 'True', 'blank': 'True'}),
+            'message': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'reminder_error': ('django.db.models.fields.BooleanField', [], {'default': 'False'}),
+            'reminder_error_message': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'reminder_last_attempt': ('django.db.models.fields.DateTimeField', [], {'auto_now_add': 'True', 'null': 'True', 'blank': 'True'}),
+            'reminder_wallpost_id': ('django.db.models.fields.CharField', [], {'max_length': '255', 'null': 'True', 'blank': 'True'}),
+            'type': ('django.db.models.fields.CharField', [], {'max_length': '255', 'null': 'True', 'blank': 'True'}),
+            'updated_at': ('django.db.models.fields.DateTimeField', [], {'auto_now': 'True', 'blank': 'True'}),
+            'user': ('django.db.models.fields.related.ForeignKey', [], {'to': u"orm['django_facebook.FacebookCustomUser']"}),
+            'user_invited': ('django.db.models.fields.CharField', [], {'max_length': '255'}),
+            'wallpost_id': ('django.db.models.fields.CharField', [], {'max_length': '255', 'null': 'True', 'blank': 'True'})
+        },
+        u'django_facebook.facebooklike': {
+            'Meta': {'unique_together': "(['user_id', 'facebook_id'],)", 'object_name': 'FacebookLike'},
+            'category': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'created_time': ('django.db.models.fields.DateTimeField', [], {'null': 'True', 'blank': 'True'}),
+            'facebook_id': ('django.db.models.fields.BigIntegerField', [], {}),
+            u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'name': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'user_id': ('django.db.models.fields.IntegerField', [], {})
+        },
+        u'django_facebook.facebookprofile': {
+            'Meta': {'object_name': 'FacebookProfile'},
             'about_me': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
             'access_token': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
             'blog_url': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
@@ -149,9 +174,35 @@ class Migration(SchemaMigration):
             u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
             'image': ('django.db.models.fields.files.ImageField', [], {'max_length': '255', 'null': 'True', 'blank': 'True'}),
             'raw_data': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
-            'user': ('django.db.models.fields.related.OneToOneField', [], {'to': u"orm['member.FacebookUser']", 'unique': 'True'}),
+            'user': ('django.db.models.fields.related.OneToOneField', [], {'to': u"orm['django_facebook.FacebookCustomUser']", 'unique': 'True'}),
             'website_url': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'})
+        },
+        u'django_facebook.facebookuser': {
+            'Meta': {'unique_together': "(['user_id', 'facebook_id'],)", 'object_name': 'FacebookUser'},
+            'facebook_id': ('django.db.models.fields.BigIntegerField', [], {}),
+            'gender': ('django.db.models.fields.CharField', [], {'max_length': '1', 'null': 'True', 'blank': 'True'}),
+            u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'name': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'user_id': ('django.db.models.fields.IntegerField', [], {})
+        },
+        u'django_facebook.opengraphshare': {
+            'Meta': {'object_name': 'OpenGraphShare', 'db_table': "'django_facebook_open_graph_share'"},
+            'action_domain': ('django.db.models.fields.CharField', [], {'max_length': '255'}),
+            'completed_at': ('django.db.models.fields.DateTimeField', [], {'null': 'True', 'blank': 'True'}),
+            'content_type': ('django.db.models.fields.related.ForeignKey', [], {'to': u"orm['contenttypes.ContentType']", 'null': 'True', 'blank': 'True'}),
+            'created_at': ('django.db.models.fields.DateTimeField', [], {'auto_now_add': 'True', 'db_index': 'True', 'blank': 'True'}),
+            'error_message': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'facebook_user_id': ('django.db.models.fields.BigIntegerField', [], {}),
+            u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'last_attempt': ('django.db.models.fields.DateTimeField', [], {'auto_now_add': 'True', 'null': 'True', 'blank': 'True'}),
+            'object_id': ('django.db.models.fields.PositiveIntegerField', [], {'null': 'True', 'blank': 'True'}),
+            'removed_at': ('django.db.models.fields.DateTimeField', [], {'null': 'True', 'blank': 'True'}),
+            'retry_count': ('django.db.models.fields.IntegerField', [], {'null': 'True', 'blank': 'True'}),
+            'share_dict': ('django.db.models.fields.TextField', [], {'null': 'True', 'blank': 'True'}),
+            'share_id': ('django.db.models.fields.CharField', [], {'max_length': '255', 'null': 'True', 'blank': 'True'}),
+            'updated_at': ('django.db.models.fields.DateTimeField', [], {'auto_now': 'True', 'blank': 'True'}),
+            'user': ('django.db.models.fields.related.ForeignKey', [], {'to': u"orm['django_facebook.FacebookCustomUser']"})
         }
     }
 
-    complete_apps = ['member']
+    complete_apps = ['django_facebook']

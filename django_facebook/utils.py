@@ -111,7 +111,7 @@ def get_user_attribute(user, profile, attribute, default=NOTHING):
     return value
 
 
-def update_user_attributes(user, profile, attributes_dict):
+def update_user_attributes(user, profile, attributes_dict, save=False):
     '''
     Write the attributes either to the user or profile instance
     '''
@@ -132,6 +132,12 @@ def update_user_attributes(user, profile, attributes_dict):
             user._fb_is_dirty = True
         else:
             logger.info('skipping update of field %s', f)
+
+    if save:
+        if getattr(user, '_fb_is_dirty', False):
+            user.save()
+        if profile and getattr(profile, '_fb_is_dirty', False):
+            profile.save()
 
 
 def try_get_profile(user):
@@ -351,7 +357,11 @@ def get_form_class(backend, request):
     # try the setting
     form_class_string = facebook_settings.FACEBOOK_REGISTRATION_FORM
     if form_class_string:
-        form_class = get_class_from_string(form_class_string, None)
+        try:
+            form_class = get_class_from_string(form_class_string, None)
+        except ImportError:
+            # Shouldn't this fail -- if you set it, it must be correct?
+            pass
 
     if not form_class:
         backend = backend or get_registration_backend()
@@ -578,41 +588,28 @@ def replication_safe(f):
     return wrapper
 
 
-def get_class_from_string(path, default='raise'):
+def get_class_from_string(path, default=None):
     """
     Return the class specified by the string.
 
     IE: django.contrib.auth.models.User
-    Will return the user class
-
-    If no default is provided and the class cannot be located
-    (e.g., because no such module exists, or because the module does
-    not contain a class of the appropriate name),
-    ``django.core.exceptions.ImproperlyConfigured`` is raised.
+    Will return the user class or cause an ImportError
     """
-    from django.core.exceptions import ImproperlyConfigured
-    backend_class = None
     try:
         from importlib import import_module
     except ImportError:
         from django.utils.importlib import import_module
     i = path.rfind('.')
     module, attr = path[:i], path[i + 1:]
+    mod = import_module(module)
     try:
-        mod = import_module(module)
-    except ImportError, e:
-        raise ImproperlyConfigured(
-            'Error loading registration backend %s: "%s"' % (module, e))
-    try:
-        backend_class = getattr(mod, attr)
+        return getattr(mod, attr)
     except AttributeError:
-        if default == 'raise':
-            raise ImproperlyConfigured(
-                'Module "%s" does not define a registration '
-                'backend named "%s"' % (module, attr))
+        if default:
+            return default
         else:
-            backend_class = default
-    return backend_class
+            raise ImportError(
+                'Cannot import name {} (from {})'.format(attr, mod))
 
 
 def parse_like_datetime(dt):
