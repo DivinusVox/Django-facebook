@@ -6,6 +6,7 @@ from django_facebook.utils import get_oauth_url, parse_scope, response_redirect,
     has_permissions, simplify_class_decorator
 from open_facebook import exceptions as open_facebook_exceptions
 import logging
+from django.conf import settings
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,9 @@ class FacebookRequired(object):
         if self.canvas:
             redirect_uri = fb_settings.FACEBOOK_CANVAS_PAGE
         else:
-            redirect_uri = request.build_absolute_uri()
+            #redirect_uri = request.build_absolute_uri()
+            ## Doesn't respect protocol until 92c9866 django committ
+            redirect_uri = settings.BASE_URL + request.path
 
         # set attempt=1 to prevent endless redirect loops
         if 'attempt=1' not in redirect_uri:
