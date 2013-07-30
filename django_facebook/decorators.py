@@ -75,7 +75,7 @@ class FacebookRequired(object):
         else:
             ## DOESN'T RESPECT PROTOCOL UNTIL 92c9866 ON DJANGO
             #redirect_uri = request.build_absolute_uri()
-            redirect_url = settings.BASE_URL + request.path
+            redirect_uri = settings.BASE_URL + request.path
 
 
         # set attempt=1 to prevent endless redirect loops
